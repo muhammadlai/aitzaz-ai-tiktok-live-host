@@ -1,41 +1,30 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#070912" />
-    <meta name="description" content="AITZAZ AI — TikTok LIVE AI Host" />
-    <title>AITZAZ AI — TikTok LIVE Host</title>
-    <style>
-      html, body, #root { min-height: 100%; margin: 0; }
-      body { background: #070912; color: #fff; }
-      #boot { min-height: 100vh; display: grid; place-items: center; font-family: system-ui, sans-serif; }
-      #boot-card { text-align: center; padding: 32px; }
-      #boot-card strong { display: block; font-size: 28px; letter-spacing: .08em; }
-      #boot-card span { display: block; margin-top: 8px; opacity: .7; }
-      #boot-error { display: none; margin-top: 18px; color: #ff9b9b; }
-    </style>
-  </head>
-  <body>
-    <div id="root">
-      <div id="boot" aria-live="polite">
-        <div id="boot-card">
-          <strong>AITZAZ AI</strong>
-          <span>Starting LIVE host…</span>
-          <div id="boot-error">The app could not start. Refresh the page.</div>
-        </div>
-      </div>
-    </div>
-    <script>
-      window.addEventListener('error', function () {
-        var el = document.getElementById('boot-error');
-        if (el) el.style.display = 'block';
-      });
-      window.addEventListener('unhandledrejection', function () {
-        var el = document.getElementById('boot-error');
-        if (el) el.style.display = 'block';
-      });
-    </script>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#070912">
+<meta name="description" content="AITZAZ AI TikTok LIVE Host">
+<title>AITZAZ AI — TikTok LIVE Host</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0;min-height:100%;background:#070912;color:#f7f8ff;font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}button,input{font:inherit}button{cursor:pointer}.app{min-height:100vh;padding:24px}.top{max-width:1200px;margin:auto;display:flex;justify-content:space-between;align-items:center;gap:16px}.brand{font-size:26px;font-weight:900;letter-spacing:.08em}.brand span{opacity:.55}.sub{color:#8e96aa;font-size:12px;margin-top:4px}.status{padding:10px 14px;border:1px solid #202536;border-radius:999px;background:#0c0f19;color:#aeb6ca;font-size:12px}.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#58d68d;margin-right:7px}.wrap{max-width:1200px;margin:22px auto}.hero{display:grid;grid-template-columns:1.25fr .75fr;min-height:390px;background:linear-gradient(135deg,#0d111d,#080a11);border:1px solid #202536;border-radius:24px;overflow:hidden}.avatar{position:relative;display:grid;place-items:center;min-height:390px;background:radial-gradient(circle at 50% 35%,#20294a 0,#0b0e19 48%,#070912 80%)}.orb{width:210px;height:270px;border-radius:48% 48% 44% 44%;background:radial-gradient(circle at 38% 30%,#f0d8d1 0,#bd9290 22%,#6f5661 52%,#171b2b 76%);box-shadow:0 0 90px #6674aa55;position:relative}.orb:before{content:"";position:absolute;inset:-28px -12px 60px;border-radius:50%;border:2px solid #ffffff22}.face{position:absolute;top:104px;left:38px;right:38px;display:flex;justify-content:space-between}.eye{width:15px;height:8px;border-radius:50%;background:#151927}.mouth{position:absolute;left:50%;top:54px;transform:translateX(-50%);width:36px;height:10px;border-bottom:3px solid #251d2a;border-radius:50%}.avatar-label{position:absolute;bottom:20px;left:20px;right:20px;text-align:center;color:#aeb6ca;font-size:12px}.panel{padding:42px;display:flex;flex-direction:column;justify-content:center}.pill{display:inline-flex;width:max-content;padding:7px 10px;border-radius:999px;background:#152016;color:#74e3a2;font-size:11px;font-weight:800}.panel h1{font-size:42px;line-height:1.05;margin:18px 0 12px}.panel p{color:#969eb3;line-height:1.6;margin:0 0 24px}.actions{display:flex;gap:10px;flex-wrap:wrap}.actions button{border:1px solid #2a3043;background:#121624;color:#fff;padding:12px 16px;border-radius:12px}.actions .primary{background:#fff;color:#070912;border-color:#fff;font-weight:800}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:16px}.card{background:#0c0f18;border:1px solid #202536;border-radius:18px;padding:20px;min-height:150px}.title{display:flex;justify-content:space-between;color:#7f899f;font-size:11px;letter-spacing:.08em}.title strong{color:#dfe4f2}.big{font-size:23px;font-weight:800;margin-top:20px}.reply{margin-top:18px;line-height:1.5;color:#dfe4f2;min-height:48px}.ask{display:flex;gap:8px;margin-top:14px}.ask input{min-width:0;flex:1;background:#080b12;border:1px solid #252b3d;color:#fff;border-radius:10px;padding:10px}.ask button{border:0;border-radius:10px;padding:10px 14px;background:#fff;color:#070912;font-weight:700}.events button{border:1px solid #272d40;background:#111522;color:#dce2f1;border-radius:9px;padding:8px 10px;margin:8px 6px 0 0}.feed{margin-top:12px;display:grid;gap:8px}.feed div{display:flex;justify-content:space-between;gap:10px;color:#aeb6ca;font-size:12px}.feed b{color:#eef1f8}.footer{max-width:1200px;margin:18px auto;color:#687188;text-align:center;font-size:11px}@media(max-width:850px){.hero{grid-template-columns:1fr}.grid{grid-template-columns:1fr}.panel{padding:28px}.panel h1{font-size:34px}.top{align-items:flex-start;flex-direction:column}.status{align-self:stretch}}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+(function(){
+const root=document.getElementById('root');
+const events=[['Sana','sent Rose'],['Ali','Hi! How are you?'],['Ayesha','followed'],['Noor','liked the LIVE']];
+root.innerHTML=`<div class="app"><header class="top"><div><div class="brand">AITZAZ <span>AI</span></div><div class="sub">TikTok LIVE Super Host</div></div><div class="status"><i class="dot"></i>Simulator mode · Dashboard online</div></header><main class="wrap"><section class="hero"><div class="avatar"><div class="orb"><div class="face"><i class="eye"></i><i class="eye"></i></div><i class="mouth"></i></div><div class="avatar-label">SARA AI HOST · 3D avatar slot ready · licensed GLB/GLTF/VRM can be connected</div></div><div class="panel"><div class="pill">● READY FOR LIVE</div><h1>Your AI host is ready.</h1><p>AITZAZ AI dashboard is running. Brain, memory, voice, event simulation and TikTok LIVE architecture are connected in the project.</p><div class="actions"><button class="primary" id="live">Start LIVE</button><button id="sim">Connect Simulator</button></div></div></section><section class="grid"><article class="card"><div class="title"><span>SUPER BRAIN</span><strong>AI READY</strong></div><div class="big">AITZAZ AI</div><div style="color:#8e96aa;margin-top:7px;font-size:12px">Production backend architecture</div></article><article class="card"><div class="title"><span>LIVE CONVERSATION</span><strong id="count">128 viewers</strong></div><div class="reply" id="reply">Welcome! I am AITZAZ AI, your LIVE host.</div><div class="ask"><input id="question" placeholder="Test a viewer question…"><button id="send">Send</button></div></article><article class="card events"><div class="title"><span>EVENT STREAM</span><strong>SIMULATOR</strong></div><div id="buttons"><button data-r="comment">💬 Comment</button><button data-r="gift">🎁 Gift</button><button data-r="follow">❤️ Follow</button><button data-r="like">👍 Like</button><button data-r="share">↗ Share</button><button data-r="join">👋 Join</button></div><div class="feed" id="feed"></div></article><article class="card"><div class="title"><span>PERSISTENT MEMORY</span><strong>READY</strong></div><div class="big">Memory layer</div><div style="color:#8e96aa;margin-top:8px;font-size:12px">Browser + secure backend memory architecture</div></article><article class="card"><div class="title"><span>VOICE / LIP SYNC</span><strong>READY</strong></div><div class="big">AI Voice</div><div style="color:#8e96aa;margin-top:8px;font-size:12px">Backend TTS + browser fallback</div></article><article class="card"><div class="title"><span>TIKTOK LIVE</span><strong>SIMULATOR</strong></div><div class="big">Event layer</div><div style="color:#8e96aa;margin-top:8px;font-size:12px">Comments · gifts · follows · likes · shares · joins · battles</div></article></section></main><footer class="footer">AITZAZ AI • Phase 2–10 • Real TikTok transport and production AI require their external credentials/services.</footer></div>`;
+function add(name,text){const el=document.createElement('div');el.innerHTML='<b>'+name+'</b><span>'+text+'</span>';document.getElementById('feed').prepend(el);document.getElementById('count').textContent=(128+document.getElementById('feed').children.length*3)+' viewers'}
+events.slice().reverse().forEach(e=>add(e[0],e[1]));
+document.querySelectorAll('[data-r]').forEach(b=>b.onclick=()=>{const r=b.dataset.r;const map={comment:['Hassan','Tell me something interesting'],gift:['Maya','sent Galaxy'],follow:['Noor','followed'],like:['Noor','liked the LIVE'],share:['Zain','shared the LIVE'],join:['Usman','joined the LIVE']};add(map[r][0],map[r][1]);});
+document.getElementById('send').onclick=()=>{const q=document.getElementById('question');if(q.value.trim()){document.getElementById('reply').textContent='Sara: Thanks for asking! '+q.value.trim()+' — I am ready to chat with the LIVE audience.';add('Test Viewer',q.value.trim());q.value='';}};
+document.getElementById('question').onkeydown=e=>{if(e.key==='Enter')document.getElementById('send').click()};
+document.getElementById('live').onclick=e=>{e.currentTarget.textContent=e.currentTarget.textContent==='Start LIVE'?'End LIVE':'Start LIVE';e.currentTarget.classList.toggle('primary');};
+document.getElementById('sim').onclick=e=>{e.currentTarget.textContent=e.currentTarget.textContent==='Connect Simulator'?'Simulator Connected':'Connect Simulator';};
+})();
+</script>
+</body>
 </html>
