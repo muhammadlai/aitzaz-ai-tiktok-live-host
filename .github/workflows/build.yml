@@ -1,11 +1,11 @@
-name: Build
+name: Build and Test
 on:
   push:
     branches: [main]
   pull_request:
 
 jobs:
-  build:
+  build-and-test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -14,4 +14,5 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm install
+      - run: npm test
       - run: npm run build

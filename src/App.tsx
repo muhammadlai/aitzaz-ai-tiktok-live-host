@@ -1,54 +1,47 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { respond, type HostEvent } from './brain'
-import { remember, loadMemory } from './memory'
-import { speak } from './avatar'
+import { loadMemory, remember, type Memory } from './memory'
+import { backendChat, backendEvent, backendStatus, connectEventStream } from './api'
+import { playBase64Audio, speakBrowser, stopAudio } from './avatar'
+import { AvatarStage } from './AvatarStage'
 
 const initial: HostEvent[] = [
-  { type: 'follow', viewer: 'Ayesha' },
-  { type: 'comment', viewer: 'Ali', text: 'Hi! How are you?' },
-  { type: 'gift', viewer: 'Sana', gift: 'Rose' },
+  { type:'follow', viewer:'Ayesha' }, { type:'comment', viewer:'Ali', text:'Hi! How are you?' }, { type:'gift', viewer:'Sana', gift:'Rose' }
 ]
+const labels: Record<string,string> = { comment:'💬 Comment', gift:'🎁 Gift', follow:'❤️ Follow', like:'👍 Like', share:'↗ Share', join:'👋 Join', battle:'⚔️ Battle' }
 
-export default function App() {
-  const [connected, setConnected] = useState(false)
-  const [live, setLive] = useState(false)
-  const [autoReply, setAutoReply] = useState(true)
-  const [events, setEvents] = useState<HostEvent[]>(initial)
-  const [memory, setMemory] = useState(loadMemory())
-  const [lastReply, setLastReply] = useState('Welcome! I am AITZAZ AI, your LIVE host.')
-  const [input, setInput] = useState('')
-  const viewerCount = useMemo(() => 128 + events.length * 17, [events.length])
+export default function App(){
+  const [connected,setConnected]=useState(false), [live,setLive]=useState(false), [autoReply,setAutoReply]=useState(true)
+  const [events,setEvents]=useState<HostEvent[]>(initial), [memory,setMemory]=useState<Memory[]>(loadMemory())
+  const [lastReply,setLastReply]=useState('Welcome! I am AITZAZ AI, your LIVE host.'), [input,setInput]=useState('')
+  const [speaking,setSpeaking]=useState(false), [provider,setProvider]=useState('checking'), [voice,setVoice]=useState('checking'), [tiktok,setTiktok]=useState('simulator'), [errors,setErrors]=useState<string[]>([])
+  const [streamOnline,setStreamOnline]=useState(false)
+  const viewerCount=useMemo(()=>128+events.length*17,[events.length])
 
-  function handle(event: HostEvent) {
-    setEvents(v => [event, ...v].slice(0, 30))
-    if (event.viewer && event.text) setMemory(remember(event.viewer, `Asked: ${event.text}`))
-    if (autoReply) {
-      const reply = respond(event, memory.map(m => m.fact))
-      setLastReply(reply.text)
-      speak({ ...reply, speaking: true })
-    }
+  useEffect(()=>{ backendStatus().then(s=>{setProvider(s.aiProvider);setVoice(s.voice);setTiktok(s.tiktok)}).catch(e=>setErrors(v=>[e.message,...v].slice(0,10))) ; const es=connectEventStream((type,data)=>{setStreamOnline(true); if(type==='tiktok.event'){setEvents(v=>[{type:data.type,viewer:data.viewer,text:data.text,gift:data.gift,id:data.id},...v].slice(0,30))}; if(type==='host.reply'){setLastReply(data.text); setProvider(data.provider||provider); if(data.text && autoReply){setSpeaking(true); if(data.audioBase64) playBase64Audio(data.audioBase64,undefined,()=>setSpeaking(false)); else speakBrowser({text:data.text,emotion:data.emotion||'warm',speaking:true},undefined,()=>setSpeaking(false))}} if(type==='error') setErrors(v=>[data.message,...v].slice(0,10))}); return()=>{es.close();stopAudio()}},[])
+
+  async function handle(event:HostEvent){
+    setEvents(v=>[event,...v].slice(0,30)); if(event.viewer&&event.text)setMemory(remember(event.viewer,`Asked: ${event.text}`))
+    if(!autoReply)return
+    try { const reply=await backendChat(event); setLastReply(reply.text); setProvider(reply.provider); setSpeaking(true); try { const {audioBase64}=await (await import('./api')).backendTts(reply.text); playBase64Audio(audioBase64,undefined,()=>setSpeaking(false)) } catch { speakBrowser({text:reply.text,emotion:reply.emotion,speaking:true},undefined,()=>setSpeaking(false)) } }
+    catch(e){ const reply=respond(event,memory.map(m=>m.fact)); setLastReply(reply.text); speakBrowser({...reply,speaking:true},()=>setSpeaking(true),()=>setSpeaking(false)); setErrors(v=>[`Backend unavailable; browser fallback used: ${(e as Error).message}`,...v].slice(0,10)) }
+    backendEvent(event).catch(()=>{})
   }
-
-  function ask() {
-    if (!input.trim()) return
-    handle({ type: 'comment', viewer: 'Test Viewer', text: input.trim() })
-    setInput('')
-  }
+  function ask(){if(!input.trim())return;handle({type:'comment',viewer:'Test Viewer',text:input.trim()});setInput('')}
+  function toggleLive(){setLive(v=>!v)}
 
   return <div className="app">
-    <header><div><div className="brand">AITZAZ <span>AI</span></div><div className="sub">TikTok LIVE Super Host</div></div><div className="status"><i className={connected ? 'on' : ''}/> {connected ? 'TikTok connected' : 'Simulator mode'}</div></header>
+    <header><div><div className="brand">AITZAZ <span>AI</span></div><div className="sub">TikTok LIVE Super Host</div></div><div className="status"><i className={connected?'on':''}/> {connected?'TikTok adapter connected':'Simulator mode'} · {streamOnline?'backend online':'backend connecting'}</div></header>
     <main>
-      <section className="hero card">
-        <div className="avatar-wrap"><div className={`avatar ${lastReply ? 'alive' : ''}`}><div className="hair"/><div className="face"><div className="eye e1"/><div className="eye e2"/><div className="mouth"/></div><div className="neck"/><div className="body"/></div><div className="ring"/></div>
-        <div className="hero-copy"><div className="live-pill"><b/> {live ? 'LIVE' : 'READY'}</div><h1>Your AI host is ready.</h1><p>One brain. Natural conversation. Memory, gifts, reactions and live-event intelligence.</p><div className="actions"><button onClick={() => setLive(v => !v)} className={live ? 'danger' : 'primary'}>{live ? 'End LIVE' : 'Start LIVE'}</button><button onClick={() => setConnected(v => !v)}>{connected ? 'Disconnect' : 'Connect TikTok'}</button></div></div>
-      </section>
+      <section className="hero card"><div className="avatar-wrap"><AvatarStage modelUrl={import.meta.env.VITE_AVATAR_MODEL_URL||''} speaking={speaking}/></div><div className="hero-copy"><div className="live-pill"><b/> {live?'LIVE':'READY'}</div><h1>Your AI host is ready.</h1><p>Backend brain, persistent memory, 3D avatar control, real voice/lip-sync pipeline and TikTok event architecture.</p><div className="actions"><button onClick={toggleLive} className={live?'danger':'primary'}>{live?'End LIVE':'Start LIVE'}</button><button onClick={()=>setConnected(v=>!v)}>{connected?'Disconnect':'Connect Simulator'}</button></div></div></section>
       <section className="grid">
-        <div className="card brain"><div className="title"><span>SUPER BRAIN</span><strong>ONLINE</strong></div><div className="brain-core"><div className="pulse"/><div><b>AITZAZ AI</b><small>Conversation Engine</small></div></div><div className="tog"><span>Automatic replies</span><button className={autoReply ? 'switch on' : 'switch'} onClick={() => setAutoReply(v => !v)}><i/></button></div><div className="provider"><span>AI Provider</span><b>OpenAI → Gemini fallback</b></div></div>
-        <div className="card conversation"><div className="title"><span>LIVE CONVERSATION</span><strong>{viewerCount} viewers</strong></div><div className="reply">{lastReply}</div><div className="ask"><input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && ask()} placeholder="Test a viewer question…"/><button onClick={ask}>Send</button></div></div>
-        <div className="card events"><div className="title"><span>EVENTS</span><strong>SIMULATOR</strong></div><div className="event-buttons"><button onClick={() => handle({type:'comment',viewer:'Hassan',text:'Tell me something interesting'})}>💬 Comment</button><button onClick={() => handle({type:'gift',viewer:'Maya',gift:'Galaxy'})}>🎁 Gift</button><button onClick={() => handle({type:'follow',viewer:'Noor'})}>❤️ Follow</button><button onClick={() => handle({type:'battle',viewer:'Opponent'})}>⚔️ Battle</button></div><div className="feed">{events.slice(0,7).map((e,i)=><div key={i}><b>{e.viewer}</b><span>{e.type === 'comment' ? e.text : e.type === 'gift' ? `sent ${e.gift}` : e.type}</span></div>)}</div></div>
-        <div className="card memory"><div className="title"><span>MEMORY</span><strong>{memory.length} records</strong></div><p>Viewer context is stored locally in this browser test. Production memory will move behind the secure backend.</p>{memory.slice(-4).reverse().map((m,i)=><div className="mem" key={i}><b>{m.viewer}</b><span>{m.fact}</span></div>)}</div>
+        <div className="card brain"><div className="title"><span>SUPER BRAIN</span><strong>{provider.toUpperCase()}</strong></div><div className="brain-core"><div className="pulse"/><div><b>AITZAZ AI</b><small>Production backend</small></div></div><div className="tog"><span>Automatic replies</span><button className={autoReply?'switch on':'switch'} onClick={()=>setAutoReply(v=>!v)}><i/></button></div><div className="provider"><span>Voice</span><b>{voice}</b></div></div>
+        <div className="card conversation"><div className="title"><span>LIVE CONVERSATION</span><strong>{viewerCount} viewers</strong></div><div className="reply">{lastReply}</div><div className="ask"><input value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==='Enter'&&ask()} placeholder="Test a viewer question…"/><button onClick={ask}>Send</button></div></div>
+        <div className="card events"><div className="title"><span>EVENT STREAM</span><strong>{tiktok.toUpperCase()}</strong></div><div className="event-buttons">{(['comment','gift','follow','like','share','join','battle'] as const).map(type=><button key={type} onClick={()=>handle(type==='comment'?{type,viewer:'Hassan',text:'Tell me something interesting'}:type==='gift'?{type,viewer:'Maya',gift:'Galaxy'}:{type,viewer:type==='battle'?'Opponent':'Noor'})}>{labels[type]}</button>)}</div><div className="feed">{events.slice(0,8).map((e,i)=><div key={e.id||i}><b>{e.viewer}</b><span>{e.type==='comment'?e.text:e.type==='gift'?`sent ${e.gift}`:e.type}</span></div>)}</div></div>
+        <div className="card memory"><div className="title"><span>PERSISTENT MEMORY</span><strong>{memory.length} records</strong></div><p>Browser memory remains for development; production AI memory is also persisted by the secure backend.</p>{memory.slice(-4).reverse().map((m,i)=><div className="mem" key={i}><b>{m.viewer}</b><span>{m.fact}</span></div>)}</div>
+        <div className="card"><div className="title"><span>SYSTEM STATUS</span><strong>{speaking?'SPEAKING':'IDLE'}</strong></div><div className="feed"><div><b>Backend</b><span>HTTP + SSE</span></div><div><b>AI</b><span>{provider}</span></div><div><b>Avatar</b><span>{import.meta.env.VITE_AVATAR_MODEL_URL?'3D model configured':'3D model asset required'}</span></div><div><b>TikTok</b><span>{tiktok}</span></div></div></div>
+        <div className="card"><div className="title"><span>ERROR LOG</span><strong>{errors.length}</strong></div><div className="feed">{errors.length?errors.slice(0,5).map((e,i)=><div key={i}><b>!</b><span>{e}</span></div>):<div><b>✓</b><span>No runtime errors reported.</span></div>}</div></div>
       </section>
-    </main>
-    <footer>AITZAZ AI • Browser test build • TikTok transport remains an adapter pending approved LIVE access</footer>
+    </main><footer>AITZAZ AI • Phase 2–10 • Real TikTok transport requires approved external LIVE access/credentials; simulator remains enabled for development.</footer>
   </div>
 }
