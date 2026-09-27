@@ -10,7 +10,7 @@ import './studio.css'
 const initial:HostEvent[]=[{type:'follow',viewer:'Ayesha'},{type:'comment',viewer:'Ali',text:'Hi! How are you?'},{type:'gift',viewer:'Sana',gift:'Rose'}]
 const labels:Record<string,string>={comment:'💬 Comment',gift:'🎁 Gift',follow:'❤️ Follow',like:'👍 Like',share:'↗ Share',join:'👋 Join',battle:'⚔️ Battle'}
 const env=import.meta.env as Record<string,string|undefined>
-function avatarUrl(host:HostProfile){return env[`VITE_AVATAR_MODEL_URL_${host.id.toUpperCase()}`]||env.VITE_AVATAR_MODEL_URL||''}
+function avatarUrl(host:HostProfile){return env[`VITE_AVATAR_MODEL_URL_${host.id.toUpperCase()}`]||env.VITE_AVATAR_MODEL_URL||host.avatarUrl}
 
 export default function App(){
  const[activeHosts,setActiveHosts]=useState(['sara']),[events,setEvents]=useState<HostEvent[]>(initial),[memory,setMemory]=useState<Memory[]>(loadMemory()),[lastReply,setLastReply]=useState('Choose a host and start a test LIVE.'),[speaking,setSpeaking]=useState(false),[provider,setProvider]=useState('checking'),[voice,setVoice]=useState('checking'),[tiktok,setTiktok]=useState('simulator'),[errors,setErrors]=useState<string[]>([]),[live,setLive]=useState(false),[input,setInput]=useState(''),[streamOnline,setStreamOnline]=useState(false)
