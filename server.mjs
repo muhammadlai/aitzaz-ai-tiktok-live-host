@@ -10,6 +10,16 @@ const HOST=process.env.HOST||'0.0.0.0'
 const MEMORY_FILE=path.join(process.cwd(),'data','memory.json')
 const clients=new Set(),seenEvents=new Map(),rateBuckets=new Map()
 const cohost=new CoHostEngine()
+let runtimeConfig={}
+const oauthStates=new Map()
+let schedules=[]
+async function loadRuntimeConfig(){try{runtimeConfig=JSON.parse(await fs.readFile(CONFIG_FILE,'utf8'))||{}}catch{runtimeConfig={}};return runtimeConfig}
+async function saveRuntimeConfig(next){runtimeConfig={...runtimeConfig,...next};await fs.mkdir(path.dirname(CONFIG_FILE),{recursive:true});await fs.writeFile(CONFIG_FILE,JSON.stringify(runtimeConfig,null,2));return runtimeConfig}
+async function loadSchedules(){try{schedules=JSON.parse(await fs.readFile(SCHEDULE_FILE,'utf8'))||[]}catch{schedules=[]}return schedules}
+async function saveSchedules(){await fs.mkdir(path.dirname(SCHEDULE_FILE),{recursive:true});await fs.writeFile(SCHEDULE_FILE,JSON.stringify(schedules,null,2))}
+function cfg(name){return runtimeConfig[name]||process.env[name]}
+function adminToken(req){return req.headers['x-aitzaz-admin-token']||''}
+function configured(name){return Boolean(cfg(name))}
 const settings={
   personality:process.env.HOST_PERSONALITY||'warm, witty, energetic LIVE host',
   language:process.env.HOST_LANGUAGE||'English + Urdu',
@@ -28,7 +38,7 @@ function sse(event,data){const msg=`event: ${event}\ndata: ${JSON.stringify(data
 async function readBody(req){let out='';for await(const chunk of req){out+=chunk;if(out.length>256000)throw new Error('request too large')}return out}
 function allowRate(key,limit=30,windowMs=60000){const now=Date.now();const b=rateBuckets.get(key)||{count:0,reset:now+windowMs};if(now>b.reset){b.count=0;b.reset=now+windowMs}b.count++;rateBuckets.set(key,b);return b.count<=limit}
 function cleanMaps(){const now=Date.now();for(const[id,at]of seenEvents)if(now-at>3600000)seenEvents.delete(id);for(const[key,b]of rateBuckets)if(now>b.reset+60000)rateBuckets.delete(key)}
-function verifyTikTok(raw,header){const secret=process.env.TIKTOK_CLIENT_SECRET;if(!secret||!header)return false;const parts=Object.fromEntries(header.split(',').map(x=>x.trim().split('='))),timestamp=parts.t,signature=parts.s;if(!timestamp||!signature)return false;const age=Math.abs(Date.now()/1000-Number(timestamp));if(!Number.isFinite(age)||age>300)return false;const expected=crypto.createHmac('sha256',secret).update(`${timestamp}.${raw}`).digest('hex');return expected.length===signature.length&&crypto.timingSafeEqual(Buffer.from(expected),Buffer.from(signature))}
+function verifyTikTok(raw,header){const secret=cfg('TIKTOK_CLIENT_SECRET');if(!secret||!header)return false;const parts=Object.fromEntries(header.split(',').map(x=>x.trim().split('='))),timestamp=parts.t,signature=parts.s;if(!timestamp||!signature)return false;const age=Math.abs(Date.now()/1000-Number(timestamp));if(!Number.isFinite(age)||age>300)return false;const expected=crypto.createHmac('sha256',secret).update(`${timestamp}.${raw}`).digest('hex');return expected.length===signature.length&&crypto.timingSafeEqual(Buffer.from(expected),Buffer.from(signature))}
 function normalizeEvent(input){
   const map={comment:'comment',chat:'comment',gift:'gift',follow:'follow',like:'like',share:'share',join:'join',battle:'battle'}
   const type=map[String(input.type||input.event||'').toLowerCase()]
@@ -41,13 +51,13 @@ function enqueue(event){
   seenEvents.set(item.id,Date.now());sse('tiktok.event',item);eventQueue.push(item);return{duplicate:false,event:item}
 }
 async function openaiChat(messages){
-  const key=process.env.OPENAI_API_KEY;if(!key)throw new Error('OPENAI_API_KEY missing')
+  const key=cfg('OPENAI_API_KEY');if(!key)throw new Error('OPENAI_API_KEY missing')
   const r=await fetch(process.env.OPENAI_BASE_URL||'https://api.openai.com/v1/chat/completions',{method:'POST',headers:{authorization:`Bearer ${key}`,'content-type':'application/json'},body:JSON.stringify({model:process.env.OPENAI_MODEL||'gpt-4o-mini',messages,temperature:.85,max_tokens:settings.responseLength})})
   if(!r.ok)throw new Error(`OpenAI ${r.status}`)
   const d=await r.json();return d.choices?.[0]?.message?.content?.trim()||'I am here with you!'
 }
 async function geminiChat(messages){
-  const key=process.env.GEMINI_API_KEY;if(!key)throw new Error('GEMINI_API_KEY missing')
+  const key=cfg('GEMINI_API_KEY');if(!key)throw new Error('GEMINI_API_KEY missing')
   const model=process.env.GEMINI_MODEL||'gemini-2.5-flash'
   const system=messages.find(m=>m.role==='system')?.content
   const contents=messages.filter(m=>m.role!=='system').map(m=>({role:m.role==='assistant'?'model':'user',parts:[{text:m.content}]}))
@@ -74,8 +84,8 @@ async function chat(input){
   return {text,provider,emotion:input.eventType==='gift'?'excited':input.eventType==='battle'?'energetic':'warm',hostId:host.id,hostName:host.name,voice:host.voice}
 }
 async function tts(text,voice){
-  const key=process.env.OPENAI_API_KEY;if(!key)throw new Error('OPENAI_API_KEY missing for TTS')
-  const r=await fetch(process.env.OPENAI_TTS_URL||'https://api.openai.com/v1/audio/speech',{method:'POST',headers:{authorization:`Bearer ${key}`,'content-type':'application/json'},body:JSON.stringify({model:process.env.OPENAI_TTS_MODEL||'gpt-4o-mini-tts',voice:voice||process.env.OPENAI_TTS_VOICE||'coral',input:String(text).slice(0,1800),response_format:'mp3'})})
+  const key=cfg('OPENAI_API_KEY');if(!key)throw new Error('OPENAI_API_KEY missing for TTS')
+  const r=await fetch(process.env.OPENAI_TTS_URL||'https://api.openai.com/v1/audio/speech',{method:'POST',headers:{authorization:`Bearer ${key}`,'content-type':'application/json'},body:JSON.stringify({model:cfg('OPENAI_TTS_MODEL')||'gpt-4o-mini-tts',voice:voice||cfg('OPENAI_TTS_VOICE')||'coral',input:String(text).slice(0,1800),response_format:'mp3'})})
   if(!r.ok)throw new Error(`TTS ${r.status}`)
   return Buffer.from(await r.arrayBuffer()).toString('base64')
 }
@@ -127,19 +137,30 @@ export function createServer(){return http.createServer(async(req,res)=>{
     if(req.method==='OPTIONS'){res.writeHead(204,{'access-control-allow-origin':process.env.FRONTEND_ORIGIN||'*','access-control-allow-methods':'GET,POST,OPTIONS','access-control-allow-headers':'content-type,tiktok-signature'});return res.end()}
     if(!allowRate(ip))return json(res,429,{error:'rate limit exceeded'})
     cleanMaps()
-    if(req.method==='GET'&&url.pathname==='/api/health')return json(res,200,{ok:true,service:'aitzaz-ai-tiktok-live-host',version:'multi-host-1',ai:{openai:!!process.env.OPENAI_API_KEY,gemini:!!process.env.GEMINI_API_KEY,tts:!!process.env.OPENAI_API_KEY},tiktokWebhook:!!process.env.TIKTOK_CLIENT_SECRET,avatar:!!process.env.VITE_AVATAR_MODEL_URL})
-    if(req.method==='GET'&&url.pathname==='/api/status')return json(res,200,{backend:'online',aiProvider:process.env.OPENAI_API_KEY?'openai':process.env.GEMINI_API_KEY?'gemini':'unconfigured',avatar:process.env.VITE_AVATAR_MODEL_URL?'model-configured':'model-required',voice:process.env.OPENAI_API_KEY?'openai-tts':'browser-fallback',tiktok:process.env.TIKTOK_CLIENT_SECRET?'webhook-configured':'simulator',queueDepth:eventQueue.items.length,activeHosts:cohost.getHosts()})
+    if(req.method==='GET'&&url.pathname==='/api/health')return json(res,200,{ok:true,service:'aitzaz-ai-tiktok-live-host',version:'multi-host-1',ai:{openai:configured('OPENAI_API_KEY'),gemini:configured('GEMINI_API_KEY'),tts:configured('OPENAI_API_KEY')},tiktokWebhook:configured('TIKTOK_CLIENT_SECRET'),tiktokClient:configured('TIKTOK_CLIENT_KEY'),avatar:!!process.env.VITE_AVATAR_MODEL_URL})
+    if(req.method==='GET'&&url.pathname==='/api/status')return json(res,200,{backend:'online',aiProvider:configured('OPENAI_API_KEY')?'openai':configured('GEMINI_API_KEY')?'gemini':'unconfigured',avatar:process.env.VITE_AVATAR_MODEL_URL?'model-configured':'model-required',voice:configured('OPENAI_API_KEY')?'openai-tts':'browser-fallback',tiktok:configured('TIKTOK_CLIENT_KEY')?'oauth-ready':'simulator',queueDepth:eventQueue.items.length,activeHosts:cohost.getHosts(),scheduled:schedules.filter(x=>x.status==='scheduled').length})
     if(req.method==='GET'&&url.pathname==='/api/hosts')return json(res,200,{hosts:publicHosts(),activeHosts:cohost.getHosts()})
     if(req.method==='POST'&&url.pathname==='/api/session'){const input=JSON.parse(await readBody(req));const activeHosts=cohost.setHosts(input.hostIds);sse('session.changed',{activeHosts});return json(res,200,{ok:true,activeHosts})}
+    if(req.method==='GET'&&url.pathname==='/api/config/status')return json(res,200,{openai:configured('OPENAI_API_KEY'),gemini:configured('GEMINI_API_KEY'),tiktok:configured('TIKTOK_CLIENT_KEY')&&configured('TIKTOK_CLIENT_SECRET'),adminConfigured:Boolean(process.env.AITZAZ_ADMIN_TOKEN),tiktokConnected:Boolean((await loadTikTokToken()).access_token)})
+    if(req.method==='POST'&&url.pathname==='/api/config'){if(!process.env.AITZAZ_ADMIN_TOKEN||adminToken(req)!==process.env.AITZAZ_ADMIN_TOKEN)return json(res,401,{error:'Invalid admin token'});const input=JSON.parse(await readBody(req));const allowed=['OPENAI_API_KEY','OPENAI_TTS_MODEL','OPENAI_TTS_VOICE','GEMINI_API_KEY','GEMINI_MODEL','TIKTOK_CLIENT_KEY','TIKTOK_CLIENT_SECRET','TIKTOK_REDIRECT_URI'];const next={};for(const key of allowed)if(typeof input[key]==='string'&&input[key].trim())next[key]=input[key].trim();await saveRuntimeConfig(next);return json(res,200,{ok:true,configured:{openai:configured('OPENAI_API_KEY'),gemini:configured('GEMINI_API_KEY'),tiktok:configured('TIKTOK_CLIENT_KEY')&&configured('TIKTOK_CLIENT_SECRET')}})}
     if(req.method==='GET'&&url.pathname==='/api/settings')return json(res,200,{...settings,activeHosts:cohost.getHosts()})
     if(req.method==='GET'&&url.pathname==='/api/memory')return json(res,200,await readMemory())
+    if(req.method==='GET'&&url.pathname==='/api/schedule')return json(res,200,schedules)
+    if(req.method==='POST'&&url.pathname==='/api/schedule'){const input=JSON.parse(await readBody(req));if(!Array.isArray(input.hostIds)||!input.hostIds.length)return json(res,400,{error:'hostIds required'});const when=new Date(`${input.date}T${input.time}`);if(Number.isNaN(when.getTime())||when.getTime()<=Date.now())return json(res,400,{error:'schedule must be a future local date/time'});const item={id:crypto.randomUUID(),hostIds:input.hostIds.slice(0,2),date:input.date,time:input.time,duration:Number(input.duration||60),topic:String(input.topic||'Open conversation').slice(0,200),status:'scheduled',createdAt:new Date().toISOString()};schedules.push(item);await saveSchedules();return json(res,200,{ok:true,schedule:item})}
+    if(req.method==='DELETE'&&url.pathname.startsWith('/api/schedule/')){const id=url.pathname.split('/').pop();schedules=schedules.filter(x=>x.id!==id);await saveSchedules();return json(res,200,{ok:true})}
     if(req.method==='GET'&&url.pathname==='/api/events'){res.writeHead(200,{'content-type':'text/event-stream','cache-control':'no-cache','connection':'keep-alive','access-control-allow-origin':process.env.FRONTEND_ORIGIN||'*'});res.write(`event: ready\ndata: ${JSON.stringify({ok:true,activeHosts:cohost.getHosts()})}\n\n`);clients.add(res);req.on('close',()=>clients.delete(res));return}
     if(req.method==='POST'&&url.pathname==='/api/chat'){const input=JSON.parse(await readBody(req));if(!allowRate(`${ip}:chat`,20))return json(res,429,{error:'chat rate limit exceeded'});const out=await chat({...input,hostId:input.hostId||cohost.pick({type:input.eventType||'comment',text:input.message})});sse('host.reply',out);return json(res,200,out)}
     if(req.method==='POST'&&url.pathname==='/api/tts'){const input=JSON.parse(await readBody(req));if(!String(input.text||'').trim())return json(res,400,{error:'text required'});return json(res,200,{audioBase64:await tts(input.text,input.voice)})}
     if(req.method==='POST'&&url.pathname==='/api/events'){const out=enqueue(JSON.parse(await readBody(req)));return json(res,200,{ok:true,...out})}
+    if(req.method==='GET'&&url.pathname==='/api/tiktok/oauth'){const clientKey=cfg('TIKTOK_CLIENT_KEY');if(!clientKey)return json(res,503,{error:'TIKTOK_CLIENT_KEY missing'});const redirect=cfg('TIKTOK_REDIRECT_URI')||`http://${req.headers.host}/api/tiktok/callback`;const state=crypto.randomBytes(24).toString('hex');oauthStates.set(state,{created:Date.now(),redirect});const params=new URLSearchParams({client_key:clientKey,response_type:'code',scope:'user.info.basic',redirect_uri:redirect,state});res.writeHead(302,{location:`https://www.tiktok.com/v2/auth/authorize/?${params.toString()}`});return res.end()}
+    if(req.method==='GET'&&url.pathname==='/api/tiktok/callback'){const state=url.searchParams.get('state')||'';const code=url.searchParams.get('code')||'';const saved=oauthStates.get(state);oauthStates.delete(state);if(!saved||Date.now()-saved.created>600000)return json(res,400,{error:'Invalid or expired OAuth state'});if(!code)return json(res,400,{error:url.searchParams.get('error_description')||'TikTok authorization failed'});const body=new URLSearchParams({client_key:cfg('TIKTOK_CLIENT_KEY')||'',client_secret:cfg('TIKTOK_CLIENT_SECRET')||'',code,grant_type:'authorization_code',redirect_uri:saved.redirect});const tokenRes=await fetch('https://open.tiktokapis.com/v2/oauth/token/',{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},body});const token=await tokenRes.json();if(!tokenRes.ok||!token.access_token)return json(res,502,{error:token.error_description||'TikTok token exchange failed'});await fs.mkdir(path.dirname(CONFIG_FILE),{recursive:true});await fs.writeFile(path.join(process.cwd(),'data/tiktok-token.json'),JSON.stringify({access_token:token.access_token,refresh_token:token.refresh_token,expires_at:Date.now()+Number(token.expires_in||86400)*1000,open_id:token.open_id,scope:token.scope},null,2));res.writeHead(302,{location:`${process.env.FRONTEND_ORIGIN||'/'}?tiktok=connected`});return res.end()}
+    if(req.method==='GET'&&url.pathname==='/api/tiktok/status'){const token=await loadTikTokToken();return json(res,200,{connected:Boolean(token.access_token),openId:token.open_id||null,scope:token.scope||null})}
     if(req.method==='POST'&&url.pathname==='/api/tiktok/webhook'){const raw=await readBody(req);if(!verifyTikTok(raw,req.headers['tiktok-signature']))return json(res,401,{error:'invalid TikTok signature'});const out=enqueue(JSON.parse(raw));return json(res,200,{ok:true,...out})}
     return json(res,404,{error:'not found',requestId})
   }catch(error){console.error(`[${requestId}]`,error);return json(res,/JSON|request too large|unsupported/.test(error.message)?400:503,{error:error.message||'server error',requestId})}
 })}
-export async function startServer(port=PORT){await ensureMemory();const server=createServer();await new Promise(resolve=>server.listen(port,HOST,resolve));console.log(`AITZAZ backend listening on ${HOST}:${PORT}`);return server}
+async function loadTikTokToken(){try{return JSON.parse(await fs.readFile(path.join(process.cwd(),'data/tiktok-token.json'),'utf8'))||{}}catch{return{}}}
+async function runSchedules(){const now=Date.now();for(const item of schedules){if(item.status==='scheduled'&&new Date(`${item.date}T${item.time}`).getTime()<=now){item.status='started';cohost.setHosts(item.hostIds);sse('schedule.started',{...item,note:'AI session started. TikTok LIVE start still requires an approved TikTok LIVE capability or manual LIVE start.'})}}await saveSchedules()}
+setInterval(()=>{runSchedules().catch(e=>console.error('schedule runner',e))},10000)
+export async function startServer(port=PORT){await ensureMemory();await loadRuntimeConfig();await loadSchedules();const server=createServer();await new Promise(resolve=>server.listen(port,HOST,resolve));console.log(`AITZAZ backend listening on ${HOST}:${PORT}`);return server}
 if(import.meta.url===`file://${process.argv[1]}`)await startServer()
