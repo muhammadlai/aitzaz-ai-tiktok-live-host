@@ -8,6 +8,8 @@ import { CoHostEngine } from './server/cohostEngine.mjs'
 const PORT=Number(process.env.PORT||8787)
 const HOST=process.env.HOST||'0.0.0.0'
 const MEMORY_FILE=path.join(process.cwd(),'data','memory.json')
+const CONFIG_FILE=path.join(process.cwd(),'data','runtime-config.json')
+const SCHEDULE_FILE=path.join(process.cwd(),'data','schedules.json')
 const clients=new Set(),seenEvents=new Map(),rateBuckets=new Map()
 const cohost=new CoHostEngine()
 let runtimeConfig={}
