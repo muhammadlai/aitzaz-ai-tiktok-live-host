@@ -1,7 +1,7 @@
 import {useEffect,useMemo,useState} from 'react'
 import {respond,type HostEvent} from './brain'
 import {loadMemory,remember,type Memory} from './memory'
-import {backendEvent,backendSession,backendStatus,backendTts,backendConfig,backendConfigStatus,backendSchedule,connectEventStream,connectTikTok} from './api'
+import {backendEvent,backendSession,backendStatus,backendTts,backendConfig,backendConfigStatus,backendSchedule,backendSchedules,connectEventStream,connectTikTok} from './api'
 import {playBase64Audio,speakBrowser,stopAudio} from './avatar'
 import {HOSTS,getHost,type HostProfile} from './hostStudio'
 import {DeferredAvatarStage} from './DeferredAvatarStage'
@@ -19,13 +19,16 @@ export default function App(){
  const selected=useMemo(()=>activeHosts.map(id=>getHost(id)),[activeHosts])
  const[settingsOpen,setSettingsOpen]=useState(false),[scheduleOpen,setScheduleOpen]=useState(false),[configForm,setConfigForm]=useState<Record<string,string>>(loadConfig),[adminToken,setAdminToken]=useState(localStorage.getItem('aitzaz.admin.token')||''),[configStatus,setConfigStatus]=useState<any>({}),[schedule,setSchedule]=useState({date:'',time:'',duration:'60',topic:'Open conversation'}),[savedMessage,setSavedMessage]=useState('')
  const viewerCount=useMemo(()=>128+events.length*17,[events.length])
+ const[eventCounts,setEventCounts]=useState<Record<string,number>>({})
+ const[scheduledItems,setScheduledItems]=useState<any[]>([])
  useEffect(()=>{
   backendStatus().then(s=>{setProvider(s.aiProvider);setVoice(s.voice);setTiktok(s.tiktok);if(Array.isArray(s.activeHosts))setActiveHosts(s.activeHosts)}).catch(e=>setErrors(v=>[e.message,...v].slice(0,8)))
   backendConfigStatus().then(setConfigStatus).catch(()=>{})
+  backendSchedules().then(setScheduledItems).catch(()=>{})
   const es=connectEventStream((type,data)=>{
    setStreamOnline(true)
    if(type==='session.changed'&&Array.isArray(data.activeHosts))setActiveHosts(data.activeHosts)
-   if(type==='tiktok.event'){const e:HostEvent={type:data.type,viewer:data.viewer,text:data.text,gift:data.gift,id:data.id};setEvents(v=>[e,...v].slice(0,30));if(e.viewer&&e.text)setMemory(remember(e.viewer,`Asked: ${e.text}`))}
+   if(type==='tiktok.event'){const e:HostEvent={type:data.type,viewer:data.viewer,text:data.text,gift:data.gift,id:data.id};setEvents(v=>[e,...v].slice(0,30));setEventCounts(v=>({...v,[e.type]:(v[e.type]||0)+1}));if(e.viewer&&e.text)setMemory(remember(e.viewer,`Asked: ${e.text}`))}
    if(type==='host.reply'){setLastReply(`${data.hostName||'HOST'}: ${data.text}`);setProvider(data.provider||'openai');if(data.text){setSpeaking(true);if(data.audioBase64)playBase64Audio(data.audioBase64,undefined,()=>setSpeaking(false));else speakBrowser({text:data.text,emotion:data.emotion||'warm',speaking:true},undefined,()=>setSpeaking(false))}}
    if(type==='error')setErrors(v=>[data.message,...v].slice(0,8))
   })
@@ -37,13 +40,13 @@ export default function App(){
   try{await backendSession(safe)}catch(e){setErrors(v=>[(e as Error).message,...v].slice(0,8))}
  }
  async function handle(event:HostEvent){
-  setEvents(v=>[event,...v].slice(0,30));if(event.viewer&&event.text)setMemory(remember(event.viewer,`Asked: ${event.text}`))
+  setEvents(v=>[event,...v].slice(0,30));setEventCounts(v=>({...v,[event.type]:(v[event.type]||0)+1}));if(event.viewer&&event.text)setMemory(remember(event.viewer,`Asked: ${event.text}`))
   try{await backendEvent({...event,hostId:activeHosts[0]})}catch(e){const reply=respond(event,memory.map(m=>m.fact));setLastReply(`${selected[0]?.name||'HOST'}: ${reply.text}`);speakBrowser({...reply,speaking:true},()=>setSpeaking(true),()=>setSpeaking(false));setErrors(v=>[`Backend unavailable; browser fallback used: ${(e as Error).message}`,...v].slice(0,8))}
  }
  function ask(){if(!input.trim())return;handle({type:'comment',viewer:'Test Viewer',text:input.trim()});setInput('')}
  async function testVoice(){const text=`Hi, I'm ${selected[0]?.name||'your AI host'}. Voice test is working.`;try{const out=await backendTts(text,selected[0]?.voice);setSpeaking(true);playBase64Audio(out.audioBase64,undefined,()=>setSpeaking(false))}catch{setSpeaking(true);speakBrowser({text,emotion:'warm',speaking:true},undefined,()=>setSpeaking(false))}}
  async function saveSettings(){try{localStorage.setItem('aitzaz.runtime.config',JSON.stringify(configForm));localStorage.setItem('aitzaz.admin.token',adminToken);await backendConfig(adminToken,configForm);setSavedMessage('Saved to backend ✓');setConfigStatus(await backendConfigStatus())}catch(e){setSavedMessage((e as Error).message)}}
- async function scheduleLive(){try{const out=await backendSchedule({hostIds:activeHosts,date:schedule.date,time:schedule.time,duration:Number(schedule.duration),topic:schedule.topic});setSavedMessage(`Scheduled ${out.schedule.hostIds.map((x:string)=>getHost(x).name).join(' + ')} ✓`);setScheduleOpen(false)}catch(e){setSavedMessage((e as Error).message)}}
+ async function scheduleLive(){try{const out=await backendSchedule({hostIds:activeHosts,date:schedule.date,time:schedule.time,duration:Number(schedule.duration),topic:schedule.topic});setSavedMessage(`Scheduled ${out.schedule.hostIds.map((x:string)=>getHost(x).name).join(' + ')} ✓`);setScheduledItems(v=>[...v,out.schedule]);setScheduleOpen(false)}catch(e){setSavedMessage((e as Error).message)}}
  return <div className="app">
   <aside className="appSidebar">
    <div className="sideBrand"><span>AI</span><b>AITZAZ</b><small>LIVE STUDIO</small></div>
@@ -54,7 +57,14 @@ export default function App(){
   <header id="studio"><div><div className="brand">AITZAZ <span>AI</span></div><div className="sub">MULTI-HOST TIKTOK LIVE STUDIO</div></div><div className="status"><i className={streamOnline?'on':''}/> {tiktok.toUpperCase()} · {streamOnline?'ENGINE ONLINE':'ENGINE READY'} <button className="settingsBtn" onClick={()=>setSettingsOpen(true)}>⚙ Settings</button></div></header>
   <main>
    <section className="studioHero card"><div className="heroText"><div className="live-pill"><b/> {live?'TEST LIVE':'READY'}</div><h1>Choose your AI LIVE hosts.</h1><p>SARA, LUNA, MAYA, ZAYN and ALEX can run solo. Select two for co-host mode: they take turns, react to each other and share one speech floor.</p><div className="actions"><button onClick={()=>setLive(v=>!v)} className={live?'danger':'primary'}>{live?'End Test LIVE':'Start Test LIVE'}</button><button onClick={()=>setScheduleOpen(true)}>📅 Schedule LIVE</button><button onClick={testVoice}>🔊 Test Voice</button></div></div><div className="miniStats"><div><b>{activeHosts.length}</b><span>ACTIVE HOSTS</span></div><div><b>2</b><span>MAX CO-HOSTS</span></div><div><b>{viewerCount}</b><span>SIM VIEWERS</span></div></div></section>
-   <section id="hosts" className="card hostLibrary"><div className="title"><span>HOST LIBRARY</span><strong>{activeHosts.length===2?'CO-HOST MODE':'SOLO MODE'}</strong></div><div className="hostCards">{HOSTS.map(host=><button key={host.id} className={activeHosts.includes(host.id)?'hostCard active':'hostCard'} onClick={()=>chooseHost(host.id)}><div className="hostAvatar"><div className="hostGlow" style={{background:host.color}}/><span>{host.name.slice(0,1)}</span></div><div className="hostInfo"><b>{host.name}</b><small>{host.tagline}</small><em>{host.gender} · {host.voice}</em></div><div className="check">{activeHosts.includes(host.id)?'✓':'+'}</div></button>)}</div></section>
+   <section className="statsStrip">
+ <div><b>{events.length}</b><span>EVENTS IN SESSION</span></div>
+ <div><b>{eventCounts.gift||0}</b><span>GIFTS</span></div>
+ <div><b>{eventCounts.comment||0}</b><span>COMMENTS</span></div>
+ <div><b>{eventCounts.follow||0}</b><span>FOLLOWS</span></div>
+ <div><b>{memory.length}</b><span>MEMORY RECORDS</span></div>
+</section>
+<section id="hosts" className="card hostLibrary"><div className="title"><span>HOST LIBRARY</span><strong>{activeHosts.length===2?'CO-HOST MODE':'SOLO MODE'}</strong></div><div className="hostCards">{HOSTS.map(host=><button key={host.id} className={activeHosts.includes(host.id)?'hostCard active':'hostCard'} onClick={()=>chooseHost(host.id)}><div className="hostAvatar"><div className="hostGlow" style={{background:host.color}}/><span>{host.name.slice(0,1)}</span></div><div className="hostInfo"><b>{host.name}</b><small>{host.tagline}</small><em>{host.gender} · {host.voice}</em></div><div className="check">{activeHosts.includes(host.id)?'✓':'+'}</div></button>)}</div></section>
    <section className="avatarGrid">{selected.map(host=><div className="avatarPanel card" key={host.id}><div className="avatarPanelHead"><b>{host.name}</b><span>{host.personality}</span></div><DeferredAvatarStage modelUrl={avatarUrl(host)} speaking={speaking}/></div>)}</section>
    <section className="grid">
     <div className="card brain"><div className="title"><span>AITZAZ SUPER BRAIN</span><strong>{provider.toUpperCase()}</strong></div><div className="brain-core"><div className="pulse"/><div><b>HOST ORCHESTRATOR</b><small>Scheduler + memory + event priority</small></div></div><div className="provider"><span>Active</span><b>{selected.map(h=>h.name).join(' + ')}</b></div><div className="provider"><span>Voice</span><b>{voice}</b></div></div>
@@ -62,6 +72,7 @@ export default function App(){
     <div id="events" className="card events"><div className="title"><span>TIKTOK EVENT ENGINE</span><strong>{tiktok.toUpperCase()}</strong></div><div className="event-buttons">{(['comment','gift','follow','like','share','join','battle'] as const).map(type=><button key={type} onClick={()=>handle(type==='comment'?{type,viewer:'Hassan',text:'Tell me something interesting'}:type==='gift'?{type,viewer:'Maya',gift:'Galaxy'}:{type,viewer:type==='battle'?'Opponent':'Noor'})}>{labels[type]}</button>)}</div><div className="feed">{events.slice(0,8).map((e,i)=><div key={e.id||i}><b>{e.viewer}</b><span>{e.type==='comment'?e.text:e.type==='gift'?'sent '+e.gift:e.type}</span></div>)}</div></div>
     <div id="memory" className="card memory"><div className="title"><span>VIEWER MEMORY</span><strong>{memory.length} records</strong></div><p>Regular viewers can build persistent context for future replies.</p>{memory.slice(-4).reverse().map((m,i)=><div className="mem" key={i}><b>{m.viewer}</b><span>{m.fact}</span></div>)}</div>
     <div className="card"><div className="title"><span>SYSTEM</span><strong>{speaking?'SPEAKING':'IDLE'}</strong></div><div className="feed"><div><b>Brain</b><span>{provider}</span></div><div><b>Hosts</b><span>{selected.map(h=>h.name).join(' + ')}</span></div><div><b>Avatar</b><span>{selected.every(h=>avatarUrl(h))?'3D models configured':'avatar slots ready'}</span></div><div><b>TikTok</b><span>{tiktok}</span></div></div></div>
+    <div className="card scheduleCard"><div className="title"><span>SCHEDULED SESSIONS</span><strong>{scheduledItems.filter(x=>x.status==='scheduled').length}</strong></div>{scheduledItems.length?<div className="scheduleList">{scheduledItems.slice(-4).reverse().map((s:any)=><div className="scheduleItem" key={s.id}><div><b>{s.hostIds.map((x:string)=>getHost(x).name).join(' + ')}</b><span>{s.date} · {s.time} · {s.duration}m</span><small>{s.topic}</small></div><em>{s.status}</em></div>)}</div>:<p className="muted">No sessions scheduled yet.</p>}</div>
     <div className="card"><div className="title"><span>ERROR LOG</span><strong>{errors.length}</strong></div><div className="feed">{errors.length?errors.slice(0,5).map((e,i)=><div key={i}><b>!</b><span>{e}</span></div>):<div><b>✓</b><span>No runtime errors reported.</span></div>}</div></div>
    </section>
   </main>
