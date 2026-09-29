@@ -1,14 +1,14 @@
-import {lazy,Suspense,useEffect,useMemo,useState} from 'react'
+import {useEffect,useMemo,useState} from 'react'
 import {respond,type HostEvent} from './brain'
 import {loadMemory,remember,type Memory} from './memory'
 import {backendEvent,backendSession,backendStatus,backendTts,backendConfig,backendConfigStatus,backendSchedule,connectEventStream,connectTikTok} from './api'
 import {playBase64Audio,speakBrowser,stopAudio} from './avatar'
 import {HOSTS,getHost,type HostProfile} from './hostStudio'
+import {DeferredAvatarStage} from './DeferredAvatarStage'
 import './studio.css'
 
 const initial:HostEvent[]=[{type:'follow',viewer:'Ayesha'},{type:'comment',viewer:'Ali',text:'Hi! How are you?'},{type:'gift',viewer:'Sana',gift:'Rose'}]
 const labels:Record<string,string>={comment:'💬 Comment',gift:'🎁 Gift',follow:'❤️ Follow',like:'👍 Like',share:'↗ Share',join:'👋 Join',battle:'⚔️ Battle'}
-const AvatarStage=lazy(()=>import('./AvatarStage').then(m=>({default:m.AvatarStage})))
 const env=import.meta.env as Record<string,string|undefined>
 const blankConfig={OPENAI_API_KEY:'',OPENAI_TTS_MODEL:'gpt-4o-mini-tts',OPENAI_TTS_VOICE:'coral',GEMINI_API_KEY:'',GEMINI_MODEL:'gemini-2.5-flash',TIKTOK_CLIENT_KEY:'',TIKTOK_CLIENT_SECRET:'',TIKTOK_REDIRECT_URI:''};
 function loadConfig(){try{return {...blankConfig,...JSON.parse(localStorage.getItem('aitzaz.runtime.config')||'{}')}}catch{return {...blankConfig}}}
@@ -49,7 +49,7 @@ export default function App(){
   <main>
    <section className="studioHero card"><div className="heroText"><div className="live-pill"><b/> {live?'TEST LIVE':'READY'}</div><h1>Choose your AI LIVE hosts.</h1><p>SARA, LUNA, MAYA, ZAYN and ALEX can run solo. Select two for co-host mode: they take turns, react to each other and share one speech floor.</p><div className="actions"><button onClick={()=>setLive(v=>!v)} className={live?'danger':'primary'}>{live?'End Test LIVE':'Start Test LIVE'}</button><button onClick={()=>setScheduleOpen(true)}>📅 Schedule LIVE</button><button onClick={testVoice}>🔊 Test Voice</button></div></div><div className="miniStats"><div><b>{activeHosts.length}</b><span>ACTIVE HOSTS</span></div><div><b>2</b><span>MAX CO-HOSTS</span></div><div><b>{viewerCount}</b><span>SIM VIEWERS</span></div></div></section>
    <section className="card hostLibrary"><div className="title"><span>HOST LIBRARY</span><strong>{activeHosts.length===2?'CO-HOST MODE':'SOLO MODE'}</strong></div><div className="hostCards">{HOSTS.map(host=><button key={host.id} className={activeHosts.includes(host.id)?'hostCard active':'hostCard'} onClick={()=>chooseHost(host.id)}><div className="hostAvatar"><div className="hostGlow" style={{background:host.color}}/><span>{host.name.slice(0,1)}</span></div><div className="hostInfo"><b>{host.name}</b><small>{host.tagline}</small><em>{host.gender} · {host.voice}</em></div><div className="check">{activeHosts.includes(host.id)?'✓':'+'}</div></button>)}</div></section>
-   <section className="avatarGrid">{selected.map(host=><div className="avatarPanel card" key={host.id}><div className="avatarPanelHead"><b>{host.name}</b><span>{host.personality}</span></div><Suspense fallback={<div className="avatar3d avatarLoading"><div>Loading 3D host…</div></div>}><AvatarStage modelUrl={avatarUrl(host)} speaking={speaking}/></Suspense></div>)}</section>
+   <section className="avatarGrid">{selected.map(host=><div className="avatarPanel card" key={host.id}><div className="avatarPanelHead"><b>{host.name}</b><span>{host.personality}</span></div><DeferredAvatarStage modelUrl={avatarUrl(host)} speaking={speaking}/></div>)}</section>
    <section className="grid">
     <div className="card brain"><div className="title"><span>AITZAZ SUPER BRAIN</span><strong>{provider.toUpperCase()}</strong></div><div className="brain-core"><div className="pulse"/><div><b>HOST ORCHESTRATOR</b><small>Scheduler + memory + event priority</small></div></div><div className="provider"><span>Active</span><b>{selected.map(h=>h.name).join(' + ')}</b></div><div className="provider"><span>Voice</span><b>{voice}</b></div></div>
     <div className="card conversation"><div className="title"><span>LIVE CONVERSATION</span><strong>{viewerCount} viewers</strong></div><div className="reply">{lastReply}</div><div className="ask"><input value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==='Enter'&&ask()} placeholder="Test a viewer question…"/><button onClick={ask}>Send</button></div></div>
