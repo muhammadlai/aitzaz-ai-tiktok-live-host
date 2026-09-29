@@ -21,7 +21,7 @@ export default function App(){
  const viewerCount=useMemo(()=>128+events.length*17,[events.length])
  useEffect(()=>{
   backendStatus().then(s=>{setProvider(s.aiProvider);setVoice(s.voice);setTiktok(s.tiktok);if(Array.isArray(s.activeHosts))setActiveHosts(s.activeHosts)}).catch(e=>setErrors(v=>[e.message,...v].slice(0,8)))
-  backendConfigStatus().then(setConfigStatus).catch(()=>{}).catch(e=>setErrors(v=>[e.message,...v].slice(0,8)))
+  backendConfigStatus().then(setConfigStatus).catch(()=>{})
   const es=connectEventStream((type,data)=>{
    setStreamOnline(true)
    if(type==='session.changed'&&Array.isArray(data.activeHosts))setActiveHosts(data.activeHosts)
