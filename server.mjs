@@ -163,6 +163,6 @@ export function createServer(){return http.createServer(async(req,res)=>{
 })}
 async function loadTikTokToken(){try{return JSON.parse(await fs.readFile(path.join(process.cwd(),'data/tiktok-token.json'),'utf8'))||{}}catch{return{}}}
 async function runSchedules(){const now=Date.now();for(const item of schedules){if(item.status==='scheduled'&&new Date(`${item.date}T${item.time}`).getTime()<=now){item.status='started';cohost.setHosts(item.hostIds);sse('schedule.started',{...item,note:'AI session started. TikTok LIVE start still requires an approved TikTok LIVE capability or manual LIVE start.'})}}await saveSchedules()}
-setInterval(()=>{runSchedules().catch(e=>console.error('schedule runner',e))},10000)
+const scheduleTimer=setInterval(()=>{runSchedules().catch(e=>console.error('schedule runner',e))},10000);scheduleTimer.unref?.()
 export async function startServer(port=PORT){await ensureMemory();await loadRuntimeConfig();await loadSchedules();const server=createServer();await new Promise(resolve=>server.listen(port,HOST,resolve));console.log(`AITZAZ backend listening on ${HOST}:${PORT}`);return server}
 if(import.meta.url===`file://${process.argv[1]}`)await startServer()
